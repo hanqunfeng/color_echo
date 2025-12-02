@@ -1,0 +1,128 @@
+#!/usr/bin/env zsh
+
+# 在脚本开始就保存脚本名称
+SCRIPT_NAME="$(basename "$0")"
+
+show_help() {
+  cat << EOF
+用法: $SCRIPT_NAME [参数] 内容
+
+参数说明:
+  -c, --color <color>        设置前景色（文字颜色）
+                             可选颜色: black red green yellow blue magenta cyan white
+
+  -b, --bg <color>           设置背景色
+                             可选颜色: black red green yellow blue magenta cyan white
+
+      --bold                 加粗字体
+      --underline            下划线
+      --italic               斜体字体（仅部分终端,Terminal 不支持，iTerm2 支持）
+
+  -n                         不换行输出，兼容 echo 的 -n 参数
+
+  -h, --help                 显示帮助信息
+
+示例:
+  $SCRIPT_NAME --color green "Hello World"
+  $SCRIPT_NAME -c red -b yellow --bold "Error Message"
+  $SCRIPT_NAME --underline "This is underlined"
+
+EOF
+}
+
+# 默认参数
+FG_COLOR="" # 前景色（文字颜色）
+BG_COLOR="" # 背景色
+BOLD=false  # 是否加粗
+UNDERLINE=false # 是否下划线
+ITALIC=false # 是否斜体
+
+# 颜色映射
+declare -A FG_MAP=( # declare 是 bash/zsh 内置命令，用来声明变量属性，-A 表示声明 关联数组（associative array），关联数组允许用 字符串作为索引（key），而不是像普通数组只能用数字索引，FG_MAP 是数组名
+  [black]=30 [red]=31 [green]=32 [yellow]=33  # [键]=值，表示将 键 映射到 值，多个键值对用空格或者换行符分隔
+  [blue]=34 [magenta]=35 [cyan]=36 [white]=37
+)
+
+declare -A BG_MAP=(
+  [black]=40 [red]=41 [green]=42 [yellow]=43
+  [blue]=44 [magenta]=45 [cyan]=46 [white]=47
+)
+
+# 解析命令行参数
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -c|--color)
+      FG_COLOR=$2
+      shift 2      # 会把所有参数左移两位，比如 -c red "Hello" 变成 "Hello"，即跳过后 $1 是 "Hello"
+      ;;
+    -b|--bg)
+      BG_COLOR=$2
+      shift 2
+      ;;
+    --bold)
+      BOLD=true
+      shift        # 会把所有参数左移一位
+      ;;
+    --underline)
+      UNDERLINE=true
+      shift
+      ;;
+    --italic)
+      # 这里可以添加斜体支持
+      ITALIC=true
+      shift
+      ;;
+    -n)
+      # 不换行 -n 参数，兼容 echo 的用法
+      NO_NEWLINE=-n
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "未知参数: $1"
+      echo "使用 -h | --help 查看帮助"
+      exit 1
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# 剩下的是要输出的内容
+CONTENT="$*"
+
+if [[ -z "$CONTENT" ]]; then
+  echo "请提供要输出的内容。使用 -h | --help 查看用法。"
+  exit 1
+fi
+
+# 构建 ANSI 组合码
+CODES=()  # 初始化一个空数组，用于存放 ANSI 控制码
+# ANSI 控制码是一种特殊字符序列，用于终端控制文本颜色、背景、加粗等。
+  # 例如：
+  # 31 → 红色文字
+  # 42 → 绿色背景
+  # 1 → 加粗
+
+[[ -n "${FG_MAP[$FG_COLOR]}" ]] && CODES+=(${FG_MAP[$FG_COLOR]})  # 将对应的 ANSI 颜色码加入数组
+[[ -n "${BG_MAP[$BG_COLOR]}" ]] && CODES+=(${BG_MAP[$BG_COLOR]})
+$BOLD && CODES+=(1)       # 如果用户指定 --bold，则加入 ANSI 加粗码 1
+$UNDERLINE && CODES+=(4)  # 如果用户指定 --underline，则加入 ANSI 下划线码 4
+$ITALIC && CODES+=(3)     # 如果用户指定 --italic，则加入 ANSI 斜体码 3
+
+# 如果 CODES=(31 43 1 4)，则输出 ;31;43;1;4
+JOINED=$(printf ";%s" "${CODES[@]}")
+JOINED=${JOINED:1} # 因为上一步多了一个开头的分号 ;31;43;1;4，所以需要去掉
+
+[[ -z "$JOINED" ]] && JOINED="0" # 如果用户没有指定颜色、加粗、下划线，即 CODES=() 数组为空，此时 JOINED 也为空，需要设置为 0，表示重置所有属性
+
+# 输出带颜色的内容: 比如 echo "\033[31;43;1;4mHello World\033[0m"
+echo $NO_NEWLINE "\033[${JOINED}m${CONTENT}\033[0m"
