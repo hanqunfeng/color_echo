@@ -14,9 +14,10 @@ show_help() {
   -b, --bg <color>           设置背景色
                              可选颜色: black red green yellow blue magenta cyan white
 
-      --bold                 加粗字体
-      --underline            下划线
-      --italic               斜体字体（仅部分终端,Terminal 不支持，iTerm2 支持）
+  -o, --bold                 加粗字体
+  -u, --underline            下划线
+  -i, --italic               斜体字体（仅部分终端,Terminal 不支持，iTerm2 支持）
+                             不带参数的短选项可以连写，如 -oui
 
   -n                         不换行输出，兼容 echo 的 -n 参数
 
@@ -26,6 +27,7 @@ show_help() {
   $SCRIPT_NAME --color green "Hello World"
   $SCRIPT_NAME -c red -b yellow --bold "Error Message"
   $SCRIPT_NAME --underline "This is underlined"
+  $SCRIPT_NAME -oui "Bold, underline and italic"
 
 EOF
 }
@@ -51,15 +53,25 @@ declare -A BG_MAP=(
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help)
+    --help)
       show_help
       exit 0
       ;;
-    -c|--color)
+    --color)
+      if [[ -z "${2-}" ]]; then
+        echo "参数 --color 需要一个颜色值"
+        echo "使用 -h | --help 查看帮助"
+        exit 1
+      fi
       FG_COLOR=$2
       shift 2      # 会把所有参数左移两位，比如 -c red "Hello" 变成 "Hello"，即跳过后 $1 是 "Hello"
       ;;
-    -b|--bg)
+    --bg)
+      if [[ -z "${2-}" ]]; then
+        echo "参数 --bg 需要一个颜色值"
+        echo "使用 -h | --help 查看帮助"
+        exit 1
+      fi
       BG_COLOR=$2
       shift 2
       ;;
@@ -72,23 +84,68 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --italic)
-      # 这里可以添加斜体支持
       ITALIC=true
-      shift
-      ;;
-    -n)
-      # 不换行 -n 参数，兼容 echo 的用法
-      NO_NEWLINE=-n
       shift
       ;;
     --)
       shift
       break
       ;;
-    -*)
+    --*)
       echo "未知参数: $1"
       echo "使用 -h | --help 查看帮助"
       exit 1
+      ;;
+    -*)
+      # 短选项按字符拆开，因此 -o、-u 和 -oui 都能识别
+      optstring="${1#-}"
+      shift
+      while [[ -n "$optstring" ]]; do
+        flag="${optstring[1]}"
+        optstring="${optstring:1}"
+        case "$flag" in
+          h)
+            show_help
+            exit 0
+            ;;
+          o)
+            BOLD=true
+            ;;
+          u)
+            UNDERLINE=true
+            ;;
+          i)
+            ITALIC=true
+            ;;
+          n)
+            # 不换行 -n 参数，兼容 echo 的用法
+            NO_NEWLINE=-n
+            ;;
+          c|b)
+            if [[ -n "$optstring" ]]; then
+              value="$optstring"
+              optstring=""
+            elif [[ $# -gt 0 ]]; then
+              value="$1"
+              shift
+            else
+              echo "参数 -$flag 需要一个颜色值"
+              echo "使用 -h | --help 查看帮助"
+              exit 1
+            fi
+            if [[ "$flag" == c ]]; then
+              FG_COLOR="$value"
+            else
+              BG_COLOR="$value"
+            fi
+            ;;
+          *)
+            echo "未知参数: -$flag"
+            echo "使用 -h | --help 查看帮助"
+            exit 1
+            ;;
+        esac
+      done
       ;;
     *)
       break
